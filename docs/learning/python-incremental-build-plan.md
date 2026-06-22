@@ -348,36 +348,37 @@ async def chat(self, user_message: str) -> None:
     self.messages.append({"role": "user", "content": user_message})
 
     while True:
-        response = await self.client.messages.create(
+        response = await self.client.chat.completions.create(
             model=self.model,
-            max_tokens=4096,
             messages=self.messages,
             tools=tool_definitions,
         )
-        self.messages.append({"role": "assistant", "content": response.content})
 
-        tool_results = []
-        for block in response.content:
-            if block.type == "text":
-                print(block.text)
-            elif block.type == "tool_use":
-                result = await execute_tool(block.name, block.input)
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": result,
-                })
+        message = response.choices[0].message
+        content = message.content or ""
+        if content:
+            print(content)
 
-        if not tool_results:
+        tool_calls = message.tool_calls or []
+        self.messages.append(assistant_message(content, tool_calls))
+        if not tool_calls:
             break
 
-        self.messages.append({"role": "user", "content": tool_results})
+        for tool_call in tool_calls:
+            name = tool_call.function.name
+            arguments = json.loads(tool_call.function.arguments or "{}")
+            result = await execute_tool(name, arguments)
+            self.messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": result,
+            })
 ```
 
 ### 验收命令
 
 ```bash
-mini-claude-py "Read pyproject.toml and tell me the package name."
+mini-claude-rebuild "Read pyproject.toml and tell me the package name."
 ```
 
 预期：模型先读文件，再根据工具结果回答，不只是打印文件内容。
@@ -413,8 +414,8 @@ grep_search(pattern, path=".", include=None)
 ### 本章验收
 
 ```bash
-mini-claude-py "Find where the Agent class is defined."
-mini-claude-py "List all Python files under python/mini_claude."
+mini-claude-rebuild "Find where the Agent class is defined."
+mini-claude-rebuild "List all Python files under mini_claude_rebuild."
 ```
 
 ### 过渡到源码
