@@ -13,7 +13,7 @@
 ```text
 python/
   pyproject.toml
-  mini_claude/
+  mini_claude_rebuild/
     __init__.py
     __main__.py
     agent.py
@@ -36,7 +36,7 @@ python/
 
 | 章 | 版本目标 | 本章新增/扩展文件 | 结束时能做什么 |
 |----|----------|------------------|----------------|
-| 1 | 空项目变 CLI | `pyproject.toml`、`__main__.py`、`__init__.py` | 能运行 `mini-claude-py --help` |
+| 1 | 空项目变 CLI | `pyproject.toml`、`__main__.py`、`__init__.py` | 能运行 `mini-claude-rebuild --help` |
 | 2 | 普通聊天机器人 | `agent.py`、扩展 `__main__.py` | 能把用户输入发给模型并打印回答 |
 | 3 | 最小工具调用 | `tools.py`、扩展 `agent.py` | 模型能调用 `read_file` |
 | 4 | Agent Loop 闭环 | 扩展 `agent.py` | 能 `tool_use -> tool_result -> 再问模型` |
@@ -72,7 +72,7 @@ python/
 ```text
 python/
   pyproject.toml
-  mini_claude/
+  mini_claude_rebuild/
     __init__.py
     __main__.py
 ```
@@ -94,13 +94,13 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
-mini-claude-py = "mini_claude.__main__:main"
+mini-claude-rebuild = "mini_claude_rebuild.__main__:main"
 
 [tool.setuptools.packages.find]
-include = ["mini_claude*"]
+include = ["mini_claude_rebuild*"]
 ```
 
-`mini_claude/__main__.py`：
+`mini_claude_rebuild/__main__.py`：
 
 ```python
 def main() -> None:
@@ -114,10 +114,10 @@ if __name__ == "__main__":
 ### 验收命令
 
 ```bash
-cd python
+cd python-rebuild
 pip install -e .
-mini-claude-py
-python -m mini_claude
+mini-claude-rebuild
+python -m mini_claude_rebuild
 ```
 
 ### 过渡到源码
@@ -135,7 +135,7 @@ python -m mini_claude
 ### 本章新增文件
 
 ```text
-mini_claude/
+mini_claude_rebuild/
   agent.py
 ```
 
@@ -239,7 +239,7 @@ mini-claude-rebuild "hello"
 ### 本章新增文件
 
 ```text
-mini_claude/
+mini_claude_rebuild/
   tools.py
 ```
 
@@ -449,8 +449,8 @@ edit_file(file_path, old_string, new_string)
 ### 验收命令
 
 ```bash
-mini-claude-py --yolo "Create tmp_demo.txt with the text hello."
-mini-claude-py --yolo "Edit tmp_demo.txt and change hello to hello mini claude."
+mini-claude-rebuild "Create tmp_demo.txt with the text hello."
+mini-claude-rebuild "Edit tmp_demo.txt and change hello to hello mini claude."
 ```
 
 ### 过渡到源码
@@ -481,8 +481,8 @@ run_shell(command, timeout=30000)
 ### 验收命令
 
 ```bash
-mini-claude-py --yolo "Run python --version and tell me the result."
-mini-claude-py --yolo "Run git status --short."
+mini-claude-rebuild "Run python --version and tell me the result."
+mini-claude-rebuild "Run git status --short."
 ```
 
 ### 过渡到源码
@@ -500,7 +500,7 @@ mini-claude-py --yolo "Run git status --short."
 ### 本章新增文件
 
 ```text
-mini_claude/
+mini_claude_rebuild/
   ui.py
 ```
 
@@ -541,7 +541,7 @@ assistant 正在说什么
 ### 本章新增文件
 
 ```text
-mini_claude/
+mini_claude_rebuild/
   prompt.py
 ```
 
@@ -579,7 +579,7 @@ When the user greets you, respond in Chinese.
 运行：
 
 ```bash
-mini-claude-py "hello"
+mini-claude-rebuild "hello"
 ```
 
 预期：模型按规则中文回应。
@@ -622,7 +622,7 @@ def clear_history(self) -> None:
 ### 验收命令
 
 ```bash
-mini-claude-py
+mini-claude-rebuild
 > hello
 > /clear
 > exit
@@ -643,7 +643,7 @@ mini-claude-py
 ### 本章新增文件
 
 ```text
-mini_claude/
+mini_claude_rebuild/
   session.py
 ```
 
@@ -665,8 +665,8 @@ def get_latest_session_id() -> str | None: ...
 ### 验收命令
 
 ```bash
-mini-claude-py "My temporary project code word is blue build."
-mini-claude-py --resume "What is my temporary project code word?"
+mini-claude-rebuild "My temporary project code word is blue build."
+mini-claude-rebuild --resume "What is my temporary project code word?"
 ```
 
 ---
@@ -706,9 +706,9 @@ dontAsk
 ### 验收命令
 
 ```bash
-mini-claude-py "Create a file named permission_test.txt."
-mini-claude-py --yolo "Create a file named permission_test.txt."
-mini-claude-py --dont-ask "Create a file named permission_test.txt."
+mini-claude-rebuild "Create a file named permission_test.txt."
+mini-claude-rebuild --yolo "Create a file named permission_test.txt."
+mini-claude-rebuild --dont-ask "Create a file named permission_test.txt."
 ```
 
 ### 过渡到源码
@@ -740,7 +740,7 @@ mini-claude-py --dont-ask "Create a file named permission_test.txt."
 ### 验收命令
 
 ```bash
-mini-claude-py "Write a short explanation of Agent Loop."
+mini-claude-rebuild "Write a short explanation of Agent Loop."
 ```
 
 预期：文本逐步出现，不是一次性出现。
@@ -803,7 +803,7 @@ ANTHROPIC_API_KEY=sk-ant-xxx mini-claude-rebuild --model claude-opus-4-6 "hello"
 ### 验收命令
 
 ```bash
-mini-claude-py --yolo "Read test/large-file.txt and summarize it."
+mini-claude-rebuild --yolo "Read test/large-file.txt and summarize it."
 ```
 
 ---
@@ -817,7 +817,7 @@ mini-claude-py --yolo "Read test/large-file.txt and summarize it."
 ### 本章新增文件
 
 ```text
-mini_claude/
+mini_claude_rebuild/
   frontmatter.py
 ```
 
@@ -858,7 +858,7 @@ Body text
 ### 本章新增文件
 
 ```text
-mini_claude/
+mini_claude_rebuild/
   memory.py
 ```
 
@@ -877,8 +877,8 @@ mini_claude/
 ### 验收命令
 
 ```bash
-mini-claude-py --yolo "Save a project memory saying this repo teaches coding agents."
-mini-claude-py --yolo "What does this repo teach?"
+mini-claude-rebuild --yolo "Save a project memory saying this repo teaches coding agents."
+mini-claude-rebuild --yolo "What does this repo teach?"
 ```
 
 ---
@@ -892,7 +892,7 @@ mini-claude-py --yolo "What does this repo teach?"
 ### 本章新增文件
 
 ```text
-mini_claude/
+mini_claude_rebuild/
   skills.py
 ```
 
@@ -909,7 +909,7 @@ mini_claude/
 ### 验收命令
 
 ```bash
-mini-claude-py
+mini-claude-rebuild
 > /skills
 ```
 
@@ -933,7 +933,7 @@ mini-claude-py
 ### 验收命令
 
 ```bash
-mini-claude-py --plan "Plan how to add a new tool."
+mini-claude-rebuild --plan "Plan how to add a new tool."
 ```
 
 ---
@@ -947,7 +947,7 @@ mini-claude-py --plan "Plan how to add a new tool."
 ### 本章新增文件
 
 ```text
-mini_claude/
+mini_claude_rebuild/
   subagent.py
 ```
 
@@ -962,7 +962,7 @@ mini_claude/
 ### 验收命令
 
 ```bash
-mini-claude-py --yolo "Use an explore agent to inspect python/mini_claude and summarize the files."
+mini-claude-rebuild --yolo "Use an explore agent to inspect python/mini_claude and summarize the files."
 ```
 
 ---
@@ -976,7 +976,7 @@ mini-claude-py --yolo "Use an explore agent to inspect python/mini_claude and su
 ### 本章新增文件
 
 ```text
-mini_claude/
+mini_claude_rebuild/
   mcp_client.py
 ```
 
@@ -995,7 +995,7 @@ mini_claude/
 ### 验收命令
 
 ```bash
-mini-claude-py --yolo "Use the MCP add tool to calculate 17+25."
+mini-claude-rebuild --yolo "Use the MCP add tool to calculate 17+25."
 ```
 
 ---
@@ -1025,12 +1025,12 @@ mini-claude-py --yolo "Use the MCP add tool to calculate 17+25."
 ### 最终验收顺序
 
 ```bash
-mini-claude-py --help
-mini-claude-py "hello"
-mini-claude-py --yolo "Read python/mini_claude/agent.py and summarize it."
-mini-claude-py --yolo "Search for build_system_prompt."
-mini-claude-py --plan "Plan a small refactor."
-mini-claude-py --resume
+mini-claude-rebuild --help
+mini-claude-rebuild "hello"
+mini-claude-rebuild --yolo "Read python/mini_claude/agent.py and summarize it."
+mini-claude-rebuild --yolo "Search for build_system_prompt."
+mini-claude-rebuild --plan "Plan a small refactor."
+mini-claude-rebuild --resume
 ```
 
 ---

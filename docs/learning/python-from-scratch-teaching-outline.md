@@ -1,4 +1,4 @@
-# 🎯 Python 版 Mini Claude Code 从零复刻教学大纲
+﻿# 🎯 Python 版 Mini Claude Code 从零复刻教学大纲
 
 这份大纲面向已经会基础 Python，但还没有系统写过 Coding Agent 的学习者。目标不是只读懂源码，而是从一个空目录开始，按阶段把项目搭建到和当前 `python/mini_claude` 基本一致的结构、命令行体验和核心能力。
 
@@ -74,16 +74,16 @@ python/
 
 1. 创建 `pyproject.toml`，要求 Python `>=3.11`。
 2. 添加依赖：先使用 `openai`、`python-dotenv` 跑通 DeepSeek；后续再补 `anthropic`、`rich`。
-3. 配置脚本入口：`mini-claude-py = "mini_claude.__main__:main"`。
+3. 配置脚本入口：`mini-claude-rebuild = "mini_claude.__main__:main"`。
 4. 实现一个最小 `main()`，先只打印欢迎信息。
-5. 执行 `pip install -e .`，确认 `mini-claude-py` 可运行。
+5. 执行 `pip install -e .`，确认 `mini-claude-rebuild` 可运行。
 
 ### 验收标准
 
 ```bash
 cd python
 pip install -e .
-mini-claude-py --help
+mini-claude-rebuild --help
 python -m mini_claude --help
 ```
 
@@ -133,7 +133,7 @@ python -m mini_claude --help
 让模型完成一个必须读文件的任务，例如：
 
 ```bash
-mini-claude-py --yolo "Read pyproject.toml and tell me the package name."
+mini-claude-rebuild --yolo "Read pyproject.toml and tell me the package name."
 ```
 
 预期：模型先调用 `read_file`，再根据文件内容回答包名。
@@ -196,8 +196,8 @@ mini-claude-py --yolo "Read pyproject.toml and tell me the package name."
 执行以下任务，观察模型是否能正确选工具：
 
 ```bash
-mini-claude-py --yolo "List all Python files, then read python/mini_claude/session.py."
-mini-claude-py --yolo "Search for the function build_system_prompt in this project."
+mini-claude-rebuild --yolo "List all Python files, then read python/mini_claude/session.py."
+mini-claude-rebuild --yolo "Search for the function build_system_prompt in this project."
 ```
 
 ---
@@ -247,7 +247,7 @@ When the user greets you, respond in Chinese.
 然后运行：
 
 ```bash
-mini-claude-py "Hello"
+mini-claude-rebuild "Hello"
 ```
 
 预期：模型遵守项目规则，用中文回应。
@@ -299,7 +299,7 @@ mini-claude-py "Hello"
 ### 验收标准
 
 ```bash
-mini-claude-py
+mini-claude-rebuild
 /cost
 /skills
 /clear
@@ -377,7 +377,7 @@ ANTHROPIC_API_KEY=sk-ant-xxx mini-claude-rebuild --model claude-opus-4-6 "hello"
 让模型同时读取多个文件：
 
 ```bash
-mini-claude-py --yolo "Read python/mini_claude/frontmatter.py, python/mini_claude/session.py, and python/mini_claude/skills.py, then compare their responsibilities."
+mini-claude-rebuild --yolo "Read python/mini_claude/frontmatter.py, python/mini_claude/session.py, and python/mini_claude/skills.py, then compare their responsibilities."
 ```
 
 预期：多个 read-only 工具可以并行完成。
@@ -418,9 +418,9 @@ mini-claude-py --yolo "Read python/mini_claude/frontmatter.py, python/mini_claud
 ### 验收标准
 
 ```bash
-mini-claude-py --plan "Edit README.md and add a section."
-mini-claude-py --dont-ask "Change README.md."
-mini-claude-py --accept-edits "Read README.md then fix a typo."
+mini-claude-rebuild --plan "Edit README.md and add a section."
+mini-claude-rebuild --dont-ask "Change README.md."
+mini-claude-rebuild --accept-edits "Read README.md then fix a typo."
 ```
 
 预期：三种模式的行为不同，且符合权限表。
@@ -459,7 +459,7 @@ mini-claude-py --accept-edits "Read README.md then fix a typo."
 ### 验收标准
 
 ```bash
-mini-claude-py --yolo "Read test/large-file.txt and summarize it."
+mini-claude-rebuild --yolo "Read test/large-file.txt and summarize it."
 ```
 
 预期：超大文件不会完整塞进上下文，而是保存完整结果并展示预览。
@@ -490,8 +490,8 @@ mini-claude-py --yolo "Read test/large-file.txt and summarize it."
 ### 验收标准
 
 ```bash
-mini-claude-py "Remember this phrase for the current session: blue build."
-mini-claude-py --resume "What phrase did I mention?"
+mini-claude-rebuild "Remember this phrase for the current session: blue build."
+mini-claude-rebuild --resume "What phrase did I mention?"
 ```
 
 预期：第二次启动能恢复上一轮上下文。
@@ -534,8 +534,8 @@ mini-claude-py --resume "What phrase did I mention?"
 ### 验收标准
 
 ```bash
-mini-claude-py --yolo "Save a project memory: this repo's Python package is under python/mini_claude."
-mini-claude-py --yolo "Read pyproject.toml, then tell me where the Python package lives."
+mini-claude-rebuild --yolo "Save a project memory: this repo's Python package is under python/mini_claude."
+mini-claude-rebuild --yolo "Read pyproject.toml, then tell me where the Python package lives."
 ```
 
 预期：模型能结合文件内容和记忆回答。
@@ -569,7 +569,7 @@ mini-claude-py --yolo "Read pyproject.toml, then tell me where the Python packag
 ### 验收标准
 
 ```bash
-mini-claude-py
+mini-claude-rebuild
 /skills
 /commit "summarize current changes"
 ```
@@ -617,7 +617,7 @@ stateDiagram-v2
 ### 验收标准
 
 ```bash
-mini-claude-py --plan "Plan how to refactor tools.py into smaller modules."
+mini-claude-rebuild --plan "Plan how to refactor tools.py into smaller modules."
 ```
 
 预期：Agent 不直接改文件，而是生成计划并等待选择。
@@ -656,7 +656,7 @@ mini-claude-py --plan "Plan how to refactor tools.py into smaller modules."
 ### 验收标准
 
 ```bash
-mini-claude-py --yolo "Use an explore sub-agent to inspect python/mini_claude, then summarize the module responsibilities."
+mini-claude-rebuild --yolo "Use an explore sub-agent to inspect python/mini_claude, then summarize the module responsibilities."
 ```
 
 预期：主 Agent 能启动子 Agent，子 Agent 输出被汇总回来。
@@ -691,7 +691,7 @@ mini-claude-py --yolo "Use an explore sub-agent to inspect python/mini_claude, t
 ### 验收标准
 
 ```bash
-mini-claude-py --yolo "Use the MCP add tool to compute 17+25."
+mini-claude-rebuild --yolo "Use the MCP add tool to compute 17+25."
 ```
 
 预期：模型调用 `mcp__test__add`，返回 `42`。
@@ -750,8 +750,8 @@ mini-claude-py --yolo "Use the MCP add tool to compute 17+25."
 ### 验收标准
 
 ```bash
-mini-claude-py --max-turns 1 "Read README.md and then inspect package.json."
-mini-claude-py --max-cost 0.01 "Do a deep review of this repo."
+mini-claude-rebuild --max-turns 1 "Read README.md and then inspect package.json."
+mini-claude-rebuild --max-cost 0.01 "Do a deep review of this repo."
 ```
 
 预期：达到限制时停止，并给出清晰提示。
@@ -782,7 +782,7 @@ mini-claude-py --max-cost 0.01 "Do a deep review of this repo."
 
 ### 手动测试顺序
 
-1. `mini-claude-py --help`
+1. `mini-claude-rebuild --help`
 2. one-shot 普通对话
 3. REPL `/clear`、`/cost`、`/skills`
 4. 读文件、列文件、搜索
