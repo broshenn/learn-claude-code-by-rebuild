@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -115,6 +116,27 @@ tool_definitions = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_shell",
+            "description": "Run a shell command and return stdout, stderr, or failure details.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "Shell command to execute.",
+                    },
+                    "timeout": {
+                        "type": "number",
+                        "description": "Timeout in milliseconds. Defaults to 30000.",
+                    },
+                },
+                "required": ["command"],
+            },
+        },
+    },
 ]
 
 
@@ -218,6 +240,28 @@ def grep_search(pattern: str, path: str = ".", include: str | None = None) -> st
     return "\n".join(results)
 
 
+def run_shell(command: str, timeout: int = 30000) -> str:
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout / 1000,
+        )
+    except subprocess.TimeoutExpired:
+        return f"Command timed out after {timeout}ms"
+    except Exception as error:
+        return f"Error: {error}"
+
+    if result.returncode != 0:
+        stdout = f"\nStdout: {result.stdout}" if result.stdout else ""
+        stderr = f"\nStderr: {result.stderr}" if result.stderr else ""
+        return f"Command failed (exit code {result.returncode}){stdout}{stderr}"
+
+    return result.stdout or "(no output)"
+
+
 async def execute_tool(name: str, arguments: dict) -> str:
     if name == "read_file":
         return read_file(arguments["file_path"])
@@ -229,4 +273,6 @@ async def execute_tool(name: str, arguments: dict) -> str:
         return list_files(arguments["pattern"], arguments.get("path", "."))
     if name == "grep_search":
         return grep_search(arguments["pattern"], arguments.get("path", "."), arguments.get("include"))
+    if name == "run_shell":
+        return run_shell(arguments["command"], int(arguments.get("timeout", 30000)))
     return f"Unknown tool: {name}"
