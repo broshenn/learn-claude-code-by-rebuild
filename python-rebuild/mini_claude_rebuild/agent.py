@@ -7,7 +7,7 @@ from openai.types.chat import ChatCompletionMessageToolCall
 
 from .prompt import build_system_prompt
 from .tools import execute_tool, tool_definitions
-from .ui import print_assistant_text, print_tool_call, print_tool_result
+from .ui import print_assistant_text, print_info, print_tool_call, print_tool_result
 
 
 class Agent:
@@ -56,6 +56,10 @@ class Agent:
                         "content": result,
                     }
                 )
+
+    def clear_history(self) -> None:
+        self.messages.clear()
+        print_info("Conversation cleared.")
 
     def _assistant_message(
         self,

@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 from . import __version__
 from .agent import Agent
-from .ui import print_error
+from .ui import print_error, print_user_prompt, print_welcome
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,6 +35,34 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+async def run_repl(agent: Agent) -> None:
+    """Interactive read-eval-print loop for multi-turn chat."""
+    print_welcome()
+
+    while True:
+        print_user_prompt()
+        try:
+            line = input()
+        except (EOFError, KeyboardInterrupt):
+            print("\nBye!\n")
+            break
+
+        user_input = line.strip()
+        if not user_input:
+            continue
+        if user_input in ("exit", "quit"):
+            print("\nBye!\n")
+            break
+        if user_input == "/clear":
+            agent.clear_history()
+            continue
+
+        try:
+            await agent.chat(user_input)
+        except Exception as exc:
+            print_error(str(exc))
+
+
 def main() -> None:
     load_dotenv()
     args = parse_args()
@@ -49,9 +77,13 @@ def main() -> None:
 
     base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     model = args.model or os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
-    prompt = " ".join(args.prompt) or "hello"
     agent = Agent(api_key=api_key, base_url=base_url, model=model)
-    asyncio.run(agent.chat(prompt))
+    prompt = " ".join(args.prompt) if args.prompt else None
+
+    if prompt:
+        asyncio.run(agent.chat(prompt))
+    else:
+        asyncio.run(run_repl(agent))
 
 
 if __name__ == "__main__":

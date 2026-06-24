@@ -3,6 +3,19 @@ from __future__ import annotations
 import sys
 
 
+def print_welcome() -> None:
+    print()
+    print("  Mini Claude Rebuild - a minimal coding agent")
+    print("  Type your request, or 'exit' to quit.")
+    print("  Commands: /clear")
+    print()
+
+
+def print_user_prompt() -> None:
+    print()
+    print("> ", end="")
+
+
 def print_assistant_text(text: str) -> None:
     sys.stdout.write(text)
     if not text.endswith("\n"):
