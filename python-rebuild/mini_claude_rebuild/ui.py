@@ -60,6 +60,11 @@ def print_info(message: str) -> None:
     print(message)
 
 
+def print_confirmation(message: str) -> None:
+    print()
+    print(f"Permission required: {message}")
+
+
 def get_tool_summary(name: str, arguments: dict) -> str:
     if name in {"read_file", "write_file", "edit_file"}:
         return arguments.get("file_path", "")

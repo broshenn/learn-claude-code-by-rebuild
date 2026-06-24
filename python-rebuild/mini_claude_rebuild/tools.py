@@ -5,6 +5,12 @@ import re
 import subprocess
 from pathlib import Path
 
+PermissionMode = str
+
+READ_TOOLS = {"read_file", "list_files", "grep_search"}
+EDIT_TOOLS = {"write_file", "edit_file"}
+CONFIRM_TOOLS = EDIT_TOOLS | {"run_shell"}
+
 
 tool_definitions = [
     {
@@ -260,6 +266,38 @@ def run_shell(command: str, timeout: int = 30000) -> str:
         return f"Command failed (exit code {result.returncode}){stdout}{stderr}"
 
     return result.stdout or "(no output)"
+
+
+def check_permission(name: str, arguments: dict, mode: PermissionMode = "default") -> dict:
+    if mode == "bypassPermissions":
+        return {"action": "allow"}
+
+    if name in READ_TOOLS:
+        return {"action": "allow"}
+
+    if mode == "plan" and name in CONFIRM_TOOLS:
+        return {"action": "deny", "message": f"Blocked in plan mode: {name}"}
+
+    if mode == "acceptEdits" and name in EDIT_TOOLS:
+        return {"action": "allow"}
+
+    if name in CONFIRM_TOOLS:
+        message = _permission_message(name, arguments)
+        if mode == "dontAsk":
+            return {"action": "deny", "message": f"Auto-denied (dontAsk mode): {message}"}
+        return {"action": "confirm", "message": message}
+
+    return {"action": "allow"}
+
+
+def _permission_message(name: str, arguments: dict) -> str:
+    if name == "write_file":
+        return f"write file: {arguments.get('file_path', '')}"
+    if name == "edit_file":
+        return f"edit file: {arguments.get('file_path', '')}"
+    if name == "run_shell":
+        return f"run shell: {arguments.get('command', '')}"
+    return name
 
 
 async def execute_tool(name: str, arguments: dict) -> str:

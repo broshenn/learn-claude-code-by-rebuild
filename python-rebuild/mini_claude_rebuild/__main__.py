@@ -24,6 +24,27 @@ def parse_args() -> argparse.Namespace:
         help="Show the current rebuild version.",
     )
     parser.add_argument(
+        "--yolo",
+        "-y",
+        action="store_true",
+        help="Skip permission prompts.",
+    )
+    parser.add_argument(
+        "--plan",
+        action="store_true",
+        help="Read-only planning mode.",
+    )
+    parser.add_argument(
+        "--accept-edits",
+        action="store_true",
+        help="Auto-approve file edits.",
+    )
+    parser.add_argument(
+        "--dont-ask",
+        action="store_true",
+        help="Auto-deny tools that need confirmation.",
+    )
+    parser.add_argument(
         "--model",
         default=None,
         help="Model to use for the chat request.",
@@ -41,8 +62,28 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def resolve_permission_mode(args: argparse.Namespace) -> str:
+    if args.yolo:
+        return "bypassPermissions"
+    if args.plan:
+        return "plan"
+    if args.accept_edits:
+        return "acceptEdits"
+    if args.dont_ask:
+        return "dontAsk"
+    return "default"
+
+
 async def run_repl(agent: Agent) -> None:
     """Interactive read-eval-print loop for multi-turn chat."""
+    async def confirm_fn(message: str) -> bool:
+        try:
+            answer = input("Allow? (y/n): ")
+        except EOFError:
+            return False
+        return answer.lower().startswith("y")
+
+    agent.set_confirm_fn(confirm_fn)
     print_welcome()
 
     while True:
@@ -83,7 +124,8 @@ def main() -> None:
 
     base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     model = args.model or os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
-    agent = Agent(api_key=api_key, base_url=base_url, model=model)
+    permission_mode = resolve_permission_mode(args)
+    agent = Agent(api_key=api_key, base_url=base_url, model=model, permission_mode=permission_mode)
 
     if args.resume:
         session_id = get_latest_session_id()
