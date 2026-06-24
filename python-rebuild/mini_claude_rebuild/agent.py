@@ -6,6 +6,7 @@ from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageToolCall
 
 from .tools import execute_tool, tool_definitions
+from .ui import print_assistant_text, print_tool_call, print_tool_result
 
 
 class Agent:
@@ -33,7 +34,7 @@ class Agent:
             message = response.choices[0].message
             content = message.content or ""
             if content:
-                print(content)
+                print_assistant_text(content)
 
             tool_calls = message.tool_calls or []
             self.messages.append(self._assistant_message(content, tool_calls))
@@ -43,9 +44,9 @@ class Agent:
             for tool_call in tool_calls:
                 name = tool_call.function.name
                 arguments = json.loads(tool_call.function.arguments or "{}")
+                print_tool_call(name, arguments)
                 result = await execute_tool(name, arguments)
-                print(f"\n[tool:{name}]")
-                print(result)
+                print_tool_result(name, result)
                 self.messages.append(
                     {
                         "role": "tool",

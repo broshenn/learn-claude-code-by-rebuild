@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from . import __version__
 from .agent import Agent
+from .ui import print_error
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,7 +44,7 @@ def main() -> None:
 
     api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
-        print("DEEPSEEK_API_KEY is required. Put it in .env or set it in your shell.")
+        print_error("DEEPSEEK_API_KEY is required. Put it in .env or set it in your shell.")
         sys.exit(1)
 
     base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
