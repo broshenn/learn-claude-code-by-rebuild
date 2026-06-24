@@ -5,6 +5,7 @@ import json
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageToolCall
 
+from .prompt import build_system_prompt
 from .tools import execute_tool, tool_definitions
 from .ui import print_assistant_text, print_tool_call, print_tool_result
 
@@ -19,6 +20,7 @@ class Agent:
     ) -> None:
         self.model = model
         self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        self.system_prompt = build_system_prompt()
         self.messages: list[dict] = []
 
     async def chat(self, user_message: str) -> None:
@@ -27,7 +29,7 @@ class Agent:
         while True:
             response = await self.client.chat.completions.create(
                 model=self.model,
-                messages=self.messages,
+                messages=[{"role": "system", "content": self.system_prompt}, *self.messages],
                 tools=tool_definitions,
             )
 
