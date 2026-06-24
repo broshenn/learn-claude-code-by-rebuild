@@ -74,6 +74,34 @@ def resolve_permission_mode(args: argparse.Namespace) -> str:
     return "default"
 
 
+def resolve_api_config(args: argparse.Namespace) -> dict:
+    if os.environ.get("DEEPSEEK_API_KEY"):
+        return {
+            "api_key": os.environ["DEEPSEEK_API_KEY"],
+            "base_url": os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+            "model": args.model or os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+            "use_openai": True,
+        }
+
+    if os.environ.get("OPENAI_API_KEY"):
+        return {
+            "api_key": os.environ["OPENAI_API_KEY"],
+            "base_url": os.environ.get("OPENAI_BASE_URL"),
+            "model": args.model or os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+            "use_openai": True,
+        }
+
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return {
+            "api_key": os.environ["ANTHROPIC_API_KEY"],
+            "base_url": os.environ.get("ANTHROPIC_BASE_URL"),
+            "model": args.model or os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-6"),
+            "use_openai": False,
+        }
+
+    return {}
+
+
 async def run_repl(agent: Agent) -> None:
     """Interactive read-eval-print loop for multi-turn chat."""
     async def confirm_fn(message: str) -> bool:
@@ -117,15 +145,22 @@ def main() -> None:
         print(f"mini-claude-rebuild {__version__}")
         return
 
-    api_key = os.environ.get("DEEPSEEK_API_KEY")
-    if not api_key:
-        print_error("DEEPSEEK_API_KEY is required. Put it in .env or set it in your shell.")
+    api_config = resolve_api_config(args)
+    if not api_config:
+        print_error(
+            "API key is required. Set DEEPSEEK_API_KEY for DeepSeek, "
+            "OPENAI_API_KEY for OpenAI-compatible APIs, or ANTHROPIC_API_KEY for Anthropic."
+        )
         sys.exit(1)
 
-    base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-    model = args.model or os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
     permission_mode = resolve_permission_mode(args)
-    agent = Agent(api_key=api_key, base_url=base_url, model=model, permission_mode=permission_mode)
+    agent = Agent(
+        api_key=api_config["api_key"],
+        base_url=api_config["base_url"],
+        model=api_config["model"],
+        use_openai=api_config["use_openai"],
+        permission_mode=permission_mode,
+    )
 
     if args.resume:
         session_id = get_latest_session_id()

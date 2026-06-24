@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Awaitable, Callable
 
+import anthropic
 from openai import AsyncOpenAI
 
 from .prompt import build_system_prompt
@@ -19,15 +20,22 @@ class Agent:
         self,
         *,
         api_key: str,
-        base_url: str,
+        base_url: str | None,
         model: str = "deepseek-v4-flash",
+        use_openai: bool = True,
         permission_mode: str = "default",
         confirm_fn: Callable[[str], Awaitable[bool]] | None = None,
     ) -> None:
         self.model = model
+        self.use_openai = use_openai
         self.permission_mode = permission_mode
         self.confirm_fn = confirm_fn
-        self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        self.client = AsyncOpenAI(api_key=api_key, base_url=base_url) if use_openai else None
+        self.anthropic_client = (
+            None
+            if use_openai
+            else anthropic.AsyncAnthropic(api_key=api_key, base_url=base_url)
+        )
         self.system_prompt = build_system_prompt()
         self.messages: list[dict] = []
         self.session_id = uuid.uuid4().hex[:8]
@@ -37,7 +45,7 @@ class Agent:
         self.messages.append({"role": "user", "content": user_message})
 
         while True:
-            message = await self._call_openai_stream()
+            message = await self._call_openai_stream() if self.use_openai else await self._call_anthropic_stream()
             content = message["content"]
             tool_calls = message["tool_calls"]
             self.messages.append(self._assistant_message(content, tool_calls))
@@ -87,6 +95,7 @@ class Agent:
                 "metadata": {
                     "id": self.session_id,
                     "model": self.model,
+                    "backend": "openai-compatible" if self.use_openai else "anthropic",
                     "cwd": str(Path.cwd()),
                     "startTime": self.session_start_time,
                     "messageCount": len(self.messages),
@@ -115,6 +124,9 @@ class Agent:
         )
 
     async def _call_openai_stream(self) -> dict:
+        if self.client is None:
+            raise RuntimeError("OpenAI-compatible client is not configured.")
+
         stream = await self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "system", "content": self.system_prompt}, *self.messages],
@@ -157,6 +169,135 @@ class Agent:
 
         tool_calls = [tool_call for _, tool_call in sorted(tool_calls_by_index.items())]
         return {"content": content, "tool_calls": tool_calls}
+
+    async def _call_anthropic_stream(self) -> dict:
+        if self.anthropic_client is None:
+            raise RuntimeError("Anthropic client is not configured.")
+
+        tool_calls_by_index: dict[int, dict] = {}
+        content = ""
+
+        async with self.anthropic_client.messages.stream(
+            model=self.model,
+            max_tokens=4096,
+            system=self.system_prompt,
+            messages=self._to_anthropic_messages(),
+            tools=self._to_anthropic_tools(),
+        ) as stream:
+            async for event in stream:
+                event_type = getattr(event, "type", "")
+                if event_type == "content_block_start":
+                    block = getattr(event, "content_block", None)
+                    if getattr(block, "type", None) == "tool_use":
+                        tool_calls_by_index[event.index] = {
+                            "id": block.id,
+                            "type": "function",
+                            "function": {"name": block.name, "arguments": ""},
+                        }
+                elif event_type == "content_block_delta":
+                    delta = event.delta
+                    text = getattr(delta, "text", None)
+                    if text:
+                        print_assistant_delta(text)
+                        content += text
+
+                    partial_json = getattr(delta, "partial_json", None)
+                    if partial_json:
+                        current = tool_calls_by_index.setdefault(
+                            event.index,
+                            {
+                                "id": f"toolu_{event.index}",
+                                "type": "function",
+                                "function": {"name": "", "arguments": ""},
+                            },
+                        )
+                        current["function"]["arguments"] += partial_json
+
+            final_message = await stream.get_final_message()
+
+        if content and not content.endswith("\n"):
+            print()
+
+        tool_calls = self._anthropic_tool_calls_from_final_message(final_message, tool_calls_by_index)
+        return {"content": content, "tool_calls": tool_calls}
+
+    def _to_anthropic_tools(self) -> list[dict]:
+        return [
+            {
+                "name": tool["function"]["name"],
+                "description": tool["function"].get("description", ""),
+                "input_schema": tool["function"]["parameters"],
+            }
+            for tool in tool_definitions
+        ]
+
+    def _to_anthropic_messages(self) -> list[dict]:
+        converted: list[dict] = []
+        for message in self.messages:
+            role = message["role"]
+            if role == "user":
+                converted.append({"role": "user", "content": message["content"]})
+            elif role == "assistant":
+                content_blocks: list[dict] = []
+                if message.get("content"):
+                    content_blocks.append({"type": "text", "text": message["content"]})
+                for tool_call in message.get("tool_calls") or []:
+                    arguments = tool_call["function"].get("arguments") or "{}"
+                    try:
+                        tool_input = json.loads(arguments)
+                    except json.JSONDecodeError:
+                        tool_input = {}
+                    content_blocks.append(
+                        {
+                            "type": "tool_use",
+                            "id": tool_call["id"],
+                            "name": tool_call["function"]["name"],
+                            "input": tool_input,
+                        }
+                    )
+                converted.append({"role": "assistant", "content": content_blocks or ""})
+            elif role == "tool":
+                converted.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": message["tool_call_id"],
+                                "content": message["content"],
+                            }
+                        ],
+                    }
+                )
+        return converted
+
+    def _anthropic_tool_calls_from_final_message(
+        self,
+        final_message: object,
+        streamed_tool_calls: dict[int, dict],
+    ) -> list[dict]:
+        tool_calls: list[dict] = []
+        for block in getattr(final_message, "content", []) or []:
+            if getattr(block, "type", None) != "tool_use":
+                continue
+            tool_calls.append(
+                {
+                    "id": block.id,
+                    "type": "function",
+                    "function": {
+                        "name": block.name,
+                        "arguments": json.dumps(block.input or {}),
+                    },
+                }
+            )
+
+        if tool_calls:
+            return tool_calls
+
+        for _, tool_call in sorted(streamed_tool_calls.items()):
+            tool_call["function"]["arguments"] = tool_call["function"]["arguments"] or "{}"
+            tool_calls.append(tool_call)
+        return tool_calls
 
     def _assistant_message(
         self,
