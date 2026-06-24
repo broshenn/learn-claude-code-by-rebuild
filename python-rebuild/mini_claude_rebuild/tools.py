@@ -5,6 +5,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from .memory import get_memory_dir, update_memory_index
+
 PermissionMode = str
 
 READ_TOOLS = {"read_file", "list_files", "grep_search"}
@@ -158,11 +160,22 @@ def write_file(file_path: str, content: str) -> str:
     path = Path(file_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+    _auto_update_memory_index(path)
 
     lines = content.split("\n")
     preview = "\n".join(f"{line_number:4d} | {line}" for line_number, line in enumerate(lines[:30], start=1))
     truncation = f"\n  ... ({len(lines)} lines total)" if len(lines) > 30 else ""
     return f"Successfully wrote to {file_path} ({len(lines)} lines)\n\n{preview}{truncation}"
+
+
+def _auto_update_memory_index(path: Path) -> None:
+    try:
+        memory_dir = get_memory_dir().resolve()
+        resolved = path.resolve()
+        if resolved.parent == memory_dir and resolved.name != "MEMORY.md" and resolved.suffix == ".md":
+            update_memory_index()
+    except Exception:
+        return
 
 
 def normalize_quotes(text: str) -> str:

@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from . import __version__
 from .agent import Agent
+from .memory import list_memories
 from .session import get_latest_session_id, load_session
 from .ui import print_error, print_info, print_user_prompt, print_welcome
 
@@ -136,6 +137,15 @@ async def run_repl(agent: Agent) -> None:
                 await agent.compact()
             except Exception as exc:
                 print_error(str(exc))
+            continue
+        if user_input == "/memory":
+            memories = list_memories()
+            if not memories:
+                print_info("No memories saved yet.")
+            else:
+                print_info(f"{len(memories)} memories:")
+                for memory in memories:
+                    print(f"  [{memory.type}] {memory.name} - {memory.description}")
             continue
 
         try:

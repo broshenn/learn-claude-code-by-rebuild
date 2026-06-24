@@ -8,6 +8,8 @@ import sys
 from datetime import date
 from pathlib import Path
 
+from .memory import build_memory_prompt_section
+
 
 SYSTEM_PROMPT_TEMPLATE = """\
 You are Mini Claude Code, a lightweight coding assistant CLI.
@@ -25,7 +27,8 @@ Date: {{date}}
 Platform: {{platform}}
 Shell: {{shell}}
 {{git_context}}
-{{project_instructions}}"""
+{{project_instructions}}
+{{memory_section}}"""
 
 INCLUDE_RE = re.compile(r"^@(\./[^\s]+|~/[^\s]+|/[^\s]+)$", re.MULTILINE)
 MAX_INCLUDE_DEPTH = 5
@@ -131,6 +134,7 @@ def build_system_prompt() -> str:
         "{{shell}}": shell,
         "{{git_context}}": get_git_context(),
         "{{project_instructions}}": load_claude_md(),
+        "{{memory_section}}": build_memory_prompt_section(),
     }
 
     prompt = SYSTEM_PROMPT_TEMPLATE
