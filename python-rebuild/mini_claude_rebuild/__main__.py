@@ -9,7 +9,8 @@ from dotenv import load_dotenv
 
 from . import __version__
 from .agent import Agent
-from .ui import print_error, print_user_prompt, print_welcome
+from .session import get_latest_session_id, load_session
+from .ui import print_error, print_info, print_user_prompt, print_welcome
 
 
 def parse_args() -> argparse.Namespace:
@@ -26,6 +27,11 @@ def parse_args() -> argparse.Namespace:
         "--model",
         default=None,
         help="Model to use for the chat request.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume the latest saved session.",
     )
     parser.add_argument(
         "prompt",
@@ -78,6 +84,18 @@ def main() -> None:
     base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     model = args.model or os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
     agent = Agent(api_key=api_key, base_url=base_url, model=model)
+
+    if args.resume:
+        session_id = get_latest_session_id()
+        if session_id:
+            session = load_session(session_id)
+            if session:
+                agent.restore_session(session)
+            else:
+                print_info("No session found to resume.")
+        else:
+            print_info("No previous sessions found.")
+
     prompt = " ".join(args.prompt) if args.prompt else None
 
     if prompt:
