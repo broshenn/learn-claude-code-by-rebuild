@@ -23,6 +23,11 @@ def print_assistant_text(text: str) -> None:
     sys.stdout.flush()
 
 
+def print_assistant_delta(text: str) -> None:
+    sys.stdout.write(text)
+    sys.stdout.flush()
+
+
 def print_tool_call(name: str, arguments: dict) -> None:
     summary = get_tool_summary(name, arguments)
     suffix = f" {summary}" if summary else ""
