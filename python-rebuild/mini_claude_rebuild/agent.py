@@ -14,6 +14,15 @@ from .session import save_session
 from .tools import check_permission, execute_tool, tool_definitions
 from .ui import print_assistant_delta, print_confirmation, print_info, print_tool_call, print_tool_result
 
+LARGE_RESULT_THRESHOLD = 30 * 1024
+KEEP_RECENT_TOOL_RESULTS = 3
+SNIP_PLACEHOLDER = "[Content snipped - re-read if needed]"
+SUMMARY_SYSTEM_PROMPT = "You are a conversation summarizer. Be concise but preserve important details."
+SUMMARY_USER_PROMPT = (
+    "Summarize the conversation so far in a concise paragraph. "
+    "Preserve key decisions, file paths, user preferences, and context needed to continue the work."
+)
+
 
 class Agent:
     def __init__(
@@ -72,8 +81,10 @@ class Agent:
                         continue
 
                 result = await execute_tool(name, arguments)
+                result = self._persist_large_result(name, result)
                 print_tool_result(name, result)
                 self._append_tool_result(tool_call["id"], result)
+                self._run_compression_pipeline()
 
     def clear_history(self) -> None:
         self.messages.clear()
@@ -81,6 +92,22 @@ class Agent:
 
     def set_confirm_fn(self, fn: Callable[[str], Awaitable[bool]]) -> None:
         self.confirm_fn = fn
+
+    async def compact(self) -> None:
+        if len(self.messages) < 2:
+            print_info("Nothing to compact yet.")
+            return
+
+        summary = await self._summarize_messages()
+        self.messages = [
+            {"role": "user", "content": f"[Previous conversation summary]\n{summary}"},
+            {
+                "role": "assistant",
+                "content": "Understood. I have the context from our previous conversation.",
+            },
+        ]
+        self._auto_save()
+        print_info("Conversation compacted.")
 
     def restore_session(self, data: dict) -> None:
         messages = data.get("messages")
@@ -103,6 +130,76 @@ class Agent:
                 "messages": self.messages,
             },
         )
+
+    def _persist_large_result(self, tool_name: str, result: str) -> str:
+        if len(result.encode("utf-8")) <= LARGE_RESULT_THRESHOLD:
+            return result
+
+        output_dir = Path.home() / ".mini-claude-rebuild" / "tool-results"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        path = output_dir / f"{int(time.time() * 1000)}-{tool_name}.txt"
+        path.write_text(result, encoding="utf-8")
+
+        lines = result.splitlines()
+        preview = "\n".join(lines[:200])
+        size_kb = len(result.encode("utf-8")) / 1024
+        return (
+            f"[Result too large ({size_kb:.1f} KB, {len(lines)} lines). "
+            f"Full output saved to {path}. Use read_file to inspect it later.]\n\n"
+            f"Preview (first 200 lines):\n{preview}"
+        )
+
+    def _run_compression_pipeline(self) -> None:
+        tool_message_indexes = [
+            index
+            for index, message in enumerate(self.messages)
+            if message.get("role") == "tool"
+            and isinstance(message.get("content"), str)
+            and message["content"] != SNIP_PLACEHOLDER
+        ]
+        old_tool_messages = tool_message_indexes[:-KEEP_RECENT_TOOL_RESULTS]
+        for index in old_tool_messages:
+            self.messages[index]["content"] = SNIP_PLACEHOLDER
+
+    async def _summarize_messages(self) -> str:
+        history = self._messages_as_summary_text()
+        if self.use_openai:
+            if self.client is None:
+                raise RuntimeError("OpenAI-compatible client is not configured.")
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
+                    {"role": "user", "content": f"{history}\n\n{SUMMARY_USER_PROMPT}"},
+                ],
+            )
+            return response.choices[0].message.content or "No summary available."
+
+        if self.anthropic_client is None:
+            raise RuntimeError("Anthropic client is not configured.")
+        response = await self.anthropic_client.messages.create(
+            model=self.model,
+            max_tokens=2048,
+            system=SUMMARY_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": f"{history}\n\n{SUMMARY_USER_PROMPT}"}],
+        )
+        return "".join(
+            block.text
+            for block in response.content
+            if getattr(block, "type", None) == "text"
+        ) or "No summary available."
+
+    def _messages_as_summary_text(self) -> str:
+        lines: list[str] = []
+        for message in self.messages:
+            role = message.get("role", "unknown")
+            if role == "assistant" and message.get("tool_calls"):
+                tool_names = [tool_call["function"]["name"] for tool_call in message["tool_calls"]]
+                lines.append(f"assistant tool calls: {', '.join(tool_names)}")
+            content = message.get("content")
+            if isinstance(content, str) and content:
+                lines.append(f"{role}: {content}")
+        return "\n".join(lines)
 
     async def _confirm_tool(self, message: str) -> bool:
         print_confirmation(message)

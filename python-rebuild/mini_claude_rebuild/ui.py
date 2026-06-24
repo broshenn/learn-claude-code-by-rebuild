@@ -7,7 +7,7 @@ def print_welcome() -> None:
     print()
     print("  Mini Claude Rebuild - a minimal coding agent")
     print("  Type your request, or 'exit' to quit.")
-    print("  Commands: /clear")
+    print("  Commands: /clear /compact")
     print()
 
 

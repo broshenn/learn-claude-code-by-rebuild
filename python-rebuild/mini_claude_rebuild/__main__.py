@@ -131,6 +131,12 @@ async def run_repl(agent: Agent) -> None:
         if user_input == "/clear":
             agent.clear_history()
             continue
+        if user_input == "/compact":
+            try:
+                await agent.compact()
+            except Exception as exc:
+                print_error(str(exc))
+            continue
 
         try:
             await agent.chat(user_input)
