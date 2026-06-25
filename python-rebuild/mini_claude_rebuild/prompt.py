@@ -9,6 +9,7 @@ from datetime import date
 from pathlib import Path
 
 from .memory import build_memory_prompt_section
+from .skills import build_skill_descriptions
 
 
 SYSTEM_PROMPT_TEMPLATE = """\
@@ -28,7 +29,8 @@ Platform: {{platform}}
 Shell: {{shell}}
 {{git_context}}
 {{project_instructions}}
-{{memory_section}}"""
+{{memory_section}}
+{{skills_section}}"""
 
 INCLUDE_RE = re.compile(r"^@(\./[^\s]+|~/[^\s]+|/[^\s]+)$", re.MULTILINE)
 MAX_INCLUDE_DEPTH = 5
@@ -135,6 +137,7 @@ def build_system_prompt() -> str:
         "{{git_context}}": get_git_context(),
         "{{project_instructions}}": load_claude_md(),
         "{{memory_section}}": build_memory_prompt_section(),
+        "{{skills_section}}": build_skill_descriptions(),
     }
 
     prompt = SYSTEM_PROMPT_TEMPLATE

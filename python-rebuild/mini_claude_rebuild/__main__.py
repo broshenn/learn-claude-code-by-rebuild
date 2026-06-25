@@ -11,6 +11,7 @@ from . import __version__
 from .agent import Agent
 from .memory import list_memories
 from .session import get_latest_session_id, load_session
+from .skills import discover_skills, get_skill_by_name, resolve_skill_prompt
 from .ui import print_error, print_info, print_user_prompt, print_welcome
 
 
@@ -147,6 +148,25 @@ async def run_repl(agent: Agent) -> None:
                 for memory in memories:
                     print(f"  [{memory.type}] {memory.name} - {memory.description}")
             continue
+        if user_input == "/skills":
+            skills = discover_skills()
+            if not skills:
+                print_info("No skills found. Add skills to .claude/skills/<name>/SKILL.md")
+            else:
+                print_info(f"{len(skills)} skills:")
+                for skill in skills:
+                    prefix = f"/{skill.name}" if skill.user_invocable else skill.name
+                    print(f"  {prefix} ({skill.source}) - {skill.description}")
+            continue
+        if user_input.startswith("/"):
+            space_index = user_input.find(" ")
+            skill_name = user_input[1:space_index] if space_index > 0 else user_input[1:]
+            skill_args = user_input[space_index + 1:] if space_index > 0 else ""
+            skill = get_skill_by_name(skill_name)
+            if skill and skill.user_invocable:
+                print_info(f"Invoking skill: {skill.name}")
+                await agent.chat(resolve_skill_prompt(skill, skill_args))
+                continue
 
         try:
             await agent.chat(user_input)
