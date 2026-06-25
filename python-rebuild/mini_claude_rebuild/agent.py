@@ -9,6 +9,7 @@ from typing import Awaitable, Callable
 import anthropic
 from openai import AsyncOpenAI
 
+from .mcp_client import McpManager
 from .prompt import build_system_prompt
 from .session import save_session
 from .subagent import get_sub_agent_config
@@ -54,7 +55,9 @@ class Agent:
         self.permission_mode = permission_mode
         self.confirm_fn = confirm_fn
         self.is_sub_agent = is_sub_agent
-        self.tools = custom_tools or tool_definitions
+        self.tools = list(custom_tools or tool_definitions)
+        self.mcp_manager = McpManager()
+        self.mcp_initialized = False
         self.output_buffer: list[str] | None = None
         self.client = AsyncOpenAI(api_key=api_key, base_url=base_url) if use_openai else None
         self.anthropic_client = (
@@ -75,6 +78,7 @@ class Agent:
         self.messages: list[dict] = []
 
     async def chat(self, user_message: str) -> None:
+        await self._load_mcp_tools()
         self.messages.append({"role": "user", "content": user_message})
 
         while True:
@@ -115,7 +119,10 @@ class Agent:
                         self._append_tool_result(tool_call["id"], result)
                         continue
 
-                result = await execute_tool(name, arguments)
+                if self.mcp_manager.is_mcp_tool(name):
+                    result = await self.mcp_manager.call_tool(name, arguments)
+                else:
+                    result = await execute_tool(name, arguments)
                 result = self._persist_large_result(name, result)
                 print_tool_result(name, result)
                 self._append_tool_result(tool_call["id"], result)
@@ -130,6 +137,20 @@ class Agent:
 
     def set_plan_approval_fn(self, fn: Callable[[str], Awaitable[dict]]) -> None:
         self.plan_approval_fn = fn
+
+    async def _load_mcp_tools(self) -> None:
+        if self.mcp_initialized or self.is_sub_agent:
+            return
+        self.mcp_initialized = True
+        try:
+            await self.mcp_manager.load_and_connect()
+        except Exception as exc:
+            print_info(f"[mcp] Init failed: {exc}")
+            return
+
+        mcp_tools = self.mcp_manager.get_tool_definitions()
+        if mcp_tools:
+            self.tools.extend(mcp_tools)
 
     def toggle_plan_mode(self) -> str:
         if self.permission_mode == "plan":
