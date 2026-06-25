@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .memory import build_memory_prompt_section
 from .skills import build_skill_descriptions
+from .subagent import build_agent_descriptions
 
 
 SYSTEM_PROMPT_TEMPLATE = """\
@@ -30,7 +31,8 @@ Shell: {{shell}}
 {{git_context}}
 {{project_instructions}}
 {{memory_section}}
-{{skills_section}}"""
+{{skills_section}}
+{{agent_section}}"""
 
 INCLUDE_RE = re.compile(r"^@(\./[^\s]+|~/[^\s]+|/[^\s]+)$", re.MULTILINE)
 MAX_INCLUDE_DEPTH = 5
@@ -138,6 +140,7 @@ def build_system_prompt() -> str:
         "{{project_instructions}}": load_claude_md(),
         "{{memory_section}}": build_memory_prompt_section(),
         "{{skills_section}}": build_skill_descriptions(),
+        "{{agent_section}}": build_agent_descriptions(),
     }
 
     prompt = SYSTEM_PROMPT_TEMPLATE

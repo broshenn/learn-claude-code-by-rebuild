@@ -11,8 +11,17 @@ from openai import AsyncOpenAI
 
 from .prompt import build_system_prompt
 from .session import save_session
+from .subagent import get_sub_agent_config
 from .tools import check_permission, execute_tool, tool_definitions
-from .ui import print_assistant_delta, print_confirmation, print_info, print_tool_call, print_tool_result
+from .ui import (
+    print_assistant_delta,
+    print_confirmation,
+    print_info,
+    print_sub_agent_end,
+    print_sub_agent_start,
+    print_tool_call,
+    print_tool_result,
+)
 
 LARGE_RESULT_THRESHOLD = 30 * 1024
 KEEP_RECENT_TOOL_RESULTS = 3
@@ -34,11 +43,19 @@ class Agent:
         use_openai: bool = True,
         permission_mode: str = "default",
         confirm_fn: Callable[[str], Awaitable[bool]] | None = None,
+        custom_system_prompt: str | None = None,
+        custom_tools: list[dict] | None = None,
+        is_sub_agent: bool = False,
     ) -> None:
+        self.api_key = api_key
+        self.base_url = base_url
         self.model = model
         self.use_openai = use_openai
         self.permission_mode = permission_mode
         self.confirm_fn = confirm_fn
+        self.is_sub_agent = is_sub_agent
+        self.tools = custom_tools or tool_definitions
+        self.output_buffer: list[str] | None = None
         self.client = AsyncOpenAI(api_key=api_key, base_url=base_url) if use_openai else None
         self.anthropic_client = (
             None
@@ -47,7 +64,7 @@ class Agent:
         )
         self.session_id = uuid.uuid4().hex[:8]
         self.session_start_time = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        self.base_system_prompt = build_system_prompt()
+        self.base_system_prompt = custom_system_prompt or build_system_prompt()
         self.pre_plan_mode: str | None = None
         self.plan_file_path: str | None = None
         self.plan_approval_fn: Callable[[str], Awaitable[dict]] | None = None
@@ -75,6 +92,11 @@ class Agent:
                 print_tool_call(name, arguments)
                 if name in {"enter_plan_mode", "exit_plan_mode"}:
                     result = await self._execute_plan_mode_tool(name)
+                    print_tool_result(name, result)
+                    self._append_tool_result(tool_call["id"], result)
+                    continue
+                if name == "agent":
+                    result = await self._execute_agent_tool(arguments)
                     print_tool_result(name, result)
                     self._append_tool_result(tool_call["id"], result)
                     continue
@@ -140,6 +162,13 @@ class Agent:
         ]
         self._auto_save()
         print_info("Conversation compacted.")
+
+    async def run_once(self, prompt: str) -> dict:
+        self.output_buffer = []
+        await self.chat(prompt)
+        text = "".join(self.output_buffer)
+        self.output_buffer = None
+        return {"text": text}
 
     def restore_session(self, data: dict) -> None:
         messages = data.get("messages")
@@ -227,6 +256,33 @@ The plan should include:
             return f"Exited plan mode. Permission mode: {self.permission_mode}\n\n## Plan\n{plan_content}"
 
         return f"Unknown plan mode tool: {name}"
+
+    async def _execute_agent_tool(self, arguments: dict) -> str:
+        agent_type = arguments.get("type", "general")
+        description = arguments.get("description", "sub-agent task")
+        prompt = arguments.get("prompt") or description
+        config = get_sub_agent_config(agent_type)
+
+        print_sub_agent_start(agent_type, description)
+        sub_agent = Agent(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            model=self.model,
+            use_openai=self.use_openai,
+            permission_mode="plan" if agent_type in {"explore", "plan"} else "bypassPermissions",
+            custom_system_prompt=config["system_prompt"],
+            custom_tools=config["tools"],
+            is_sub_agent=True,
+        )
+
+        try:
+            result = await sub_agent.run_once(prompt)
+        except Exception as exc:
+            print_sub_agent_end(agent_type, description)
+            return f"Sub-agent error: {exc}"
+
+        print_sub_agent_end(agent_type, description)
+        return result["text"] or "(Sub-agent produced no output)"
 
     def _persist_large_result(self, tool_name: str, result: str) -> str:
         if len(result.encode("utf-8")) <= LARGE_RESULT_THRESHOLD:
@@ -317,6 +373,12 @@ The plan should include:
             }
         )
 
+    def _emit_text(self, text: str) -> None:
+        if self.output_buffer is not None:
+            self.output_buffer.append(text)
+        if not self.is_sub_agent:
+            print_assistant_delta(text)
+
     async def _call_openai_stream(self) -> dict:
         if self.client is None:
             raise RuntimeError("OpenAI-compatible client is not configured.")
@@ -324,7 +386,7 @@ The plan should include:
         stream = await self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "system", "content": self.system_prompt}, *self.messages],
-            tools=tool_definitions,
+            tools=self.tools,
             stream=True,
         )
 
@@ -337,7 +399,7 @@ The plan should include:
 
             delta = chunk.choices[0].delta
             if delta.content:
-                print_assistant_delta(delta.content)
+                self._emit_text(delta.content)
                 content += delta.content
 
             if delta.tool_calls:
@@ -358,7 +420,7 @@ The plan should include:
                     if tool_call_delta.function and tool_call_delta.function.arguments:
                         current["function"]["arguments"] += tool_call_delta.function.arguments
 
-        if content and not content.endswith("\n"):
+        if content and not content.endswith("\n") and not self.is_sub_agent:
             print()
 
         tool_calls = [tool_call for _, tool_call in sorted(tool_calls_by_index.items())]
@@ -392,7 +454,7 @@ The plan should include:
                     delta = event.delta
                     text = getattr(delta, "text", None)
                     if text:
-                        print_assistant_delta(text)
+                        self._emit_text(text)
                         content += text
 
                     partial_json = getattr(delta, "partial_json", None)
@@ -409,7 +471,7 @@ The plan should include:
 
             final_message = await stream.get_final_message()
 
-        if content and not content.endswith("\n"):
+        if content and not content.endswith("\n") and not self.is_sub_agent:
             print()
 
         tool_calls = self._anthropic_tool_calls_from_final_message(final_message, tool_calls_by_index)
@@ -422,7 +484,7 @@ The plan should include:
                 "description": tool["function"].get("description", ""),
                 "input_schema": tool["function"]["parameters"],
             }
-            for tool in tool_definitions
+            for tool in self.tools
         ]
 
     def _to_anthropic_messages(self) -> list[dict]:

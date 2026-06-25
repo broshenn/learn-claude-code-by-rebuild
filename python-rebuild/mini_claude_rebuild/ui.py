@@ -89,6 +89,16 @@ def print_plan_approval_options() -> None:
     print("  3. Keep planning")
 
 
+def print_sub_agent_start(agent_type: str, description: str) -> None:
+    print()
+    print(f"[sub-agent:{agent_type}] {description}")
+
+
+def print_sub_agent_end(agent_type: str, description: str) -> None:
+    suffix = f" {description}" if description else ""
+    print(f"[sub-agent:{agent_type}] completed{suffix}")
+
+
 def get_tool_summary(name: str, arguments: dict) -> str:
     if name in {"read_file", "write_file", "edit_file"}:
         return arguments.get("file_path", "")
@@ -99,4 +109,6 @@ def get_tool_summary(name: str, arguments: dict) -> str:
     if name == "run_shell":
         command = arguments.get("command", "")
         return command[:60] + "..." if len(command) > 60 else command
+    if name == "agent":
+        return f'[{arguments.get("type", "general")}] {arguments.get("description", "")}'
     return ""

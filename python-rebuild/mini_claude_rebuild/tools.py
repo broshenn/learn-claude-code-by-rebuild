@@ -161,6 +161,31 @@ tool_definitions = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "agent",
+            "description": "Launch a sub-agent with isolated context. Types: explore, plan, general, or a custom agent type.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "description": "Agent type to run, such as explore, plan, or general.",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Short description of what the sub-agent should do.",
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "Detailed task prompt for the sub-agent.",
+                    },
+                },
+                "required": ["type", "prompt"],
+            },
+        },
+    },
 ]
 
 
@@ -309,7 +334,7 @@ def check_permission(
     if name in READ_TOOLS:
         return {"action": "allow"}
 
-    if name in {"enter_plan_mode", "exit_plan_mode"}:
+    if name in {"enter_plan_mode", "exit_plan_mode", "agent"}:
         return {"action": "allow"}
 
     if mode == "plan" and name in CONFIRM_TOOLS:
