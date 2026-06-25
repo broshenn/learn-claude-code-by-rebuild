@@ -12,7 +12,14 @@ from .agent import Agent
 from .memory import list_memories
 from .session import get_latest_session_id, load_session
 from .skills import discover_skills, get_skill_by_name, resolve_skill_prompt
-from .ui import print_error, print_info, print_user_prompt, print_welcome
+from .ui import (
+    print_error,
+    print_info,
+    print_plan_approval_options,
+    print_plan_for_approval,
+    print_user_prompt,
+    print_welcome,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -114,6 +121,28 @@ async def run_repl(agent: Agent) -> None:
         return answer.lower().startswith("y")
 
     agent.set_confirm_fn(confirm_fn)
+
+    async def plan_approval_fn(plan_content: str) -> dict:
+        print_plan_for_approval(plan_content)
+        print_plan_approval_options()
+        while True:
+            try:
+                choice = input("Enter choice (1-3): ").strip()
+            except EOFError:
+                return {"choice": "manual-execute"}
+            if choice == "1":
+                return {"choice": "execute"}
+            if choice == "2":
+                return {"choice": "manual-execute"}
+            if choice == "3":
+                try:
+                    feedback = input("Feedback: ").strip()
+                except EOFError:
+                    feedback = ""
+                return {"choice": "keep-planning", "feedback": feedback}
+            print("Invalid choice. Enter 1, 2, or 3.")
+
+    agent.set_plan_approval_fn(plan_approval_fn)
     print_welcome()
 
     while True:
@@ -132,6 +161,9 @@ async def run_repl(agent: Agent) -> None:
             break
         if user_input == "/clear":
             agent.clear_history()
+            continue
+        if user_input == "/plan":
+            agent.toggle_plan_mode()
             continue
         if user_input == "/compact":
             try:

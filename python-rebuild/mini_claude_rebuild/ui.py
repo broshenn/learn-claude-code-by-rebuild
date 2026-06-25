@@ -7,7 +7,7 @@ def print_welcome() -> None:
     print()
     print("  Mini Claude Rebuild - a minimal coding agent")
     print("  Type your request, or 'exit' to quit.")
-    print("  Commands: /clear /compact /memory /skills")
+    print("  Commands: /clear /plan /compact /memory /skills")
     print()
 
 
@@ -68,6 +68,25 @@ def print_info(message: str) -> None:
 def print_confirmation(message: str) -> None:
     print()
     print(f"Permission required: {message}")
+
+
+def print_plan_for_approval(plan_content: str) -> None:
+    print()
+    print("Plan for approval")
+    print("=" * 50)
+    lines = plan_content.splitlines()
+    for line in lines[:80]:
+        print(line)
+    if len(lines) > 80:
+        print(f"... ({len(lines) - 80} more lines)")
+    print("=" * 50)
+
+
+def print_plan_approval_options() -> None:
+    print("Choose an option:")
+    print("  1. Approve and execute with auto-approved edits")
+    print("  2. Approve, but keep manual confirmations")
+    print("  3. Keep planning")
 
 
 def get_tool_summary(name: str, arguments: dict) -> str:

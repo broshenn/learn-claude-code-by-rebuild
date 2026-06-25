@@ -45,10 +45,17 @@ class Agent:
             if use_openai
             else anthropic.AsyncAnthropic(api_key=api_key, base_url=base_url)
         )
-        self.system_prompt = build_system_prompt()
-        self.messages: list[dict] = []
         self.session_id = uuid.uuid4().hex[:8]
         self.session_start_time = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        self.base_system_prompt = build_system_prompt()
+        self.pre_plan_mode: str | None = None
+        self.plan_file_path: str | None = None
+        self.plan_approval_fn: Callable[[str], Awaitable[dict]] | None = None
+        self.system_prompt = self.base_system_prompt
+        if self.permission_mode == "plan":
+            self.plan_file_path = self._generate_plan_file_path()
+            self.system_prompt = self.base_system_prompt + self._build_plan_mode_prompt()
+        self.messages: list[dict] = []
 
     async def chat(self, user_message: str) -> None:
         self.messages.append({"role": "user", "content": user_message})
@@ -66,7 +73,13 @@ class Agent:
                 name = tool_call["function"]["name"]
                 arguments = json.loads(tool_call["function"]["arguments"] or "{}")
                 print_tool_call(name, arguments)
-                permission = check_permission(name, arguments, self.permission_mode)
+                if name in {"enter_plan_mode", "exit_plan_mode"}:
+                    result = await self._execute_plan_mode_tool(name)
+                    print_tool_result(name, result)
+                    self._append_tool_result(tool_call["id"], result)
+                    continue
+
+                permission = check_permission(name, arguments, self.permission_mode, self.plan_file_path)
                 if permission["action"] == "deny":
                     result = f"Action denied: {permission.get('message', '')}"
                     print_info(result)
@@ -92,6 +105,25 @@ class Agent:
 
     def set_confirm_fn(self, fn: Callable[[str], Awaitable[bool]]) -> None:
         self.confirm_fn = fn
+
+    def set_plan_approval_fn(self, fn: Callable[[str], Awaitable[dict]]) -> None:
+        self.plan_approval_fn = fn
+
+    def toggle_plan_mode(self) -> str:
+        if self.permission_mode == "plan":
+            self.permission_mode = self.pre_plan_mode or "default"
+            self.pre_plan_mode = None
+            self.plan_file_path = None
+            self.system_prompt = self.base_system_prompt
+            print_info(f"Exited plan mode -> {self.permission_mode} mode")
+            return self.permission_mode
+
+        self.pre_plan_mode = self.permission_mode
+        self.permission_mode = "plan"
+        self.plan_file_path = self._generate_plan_file_path()
+        self.system_prompt = self.base_system_prompt + self._build_plan_mode_prompt()
+        print_info(f"Entered plan mode. Plan file: {self.plan_file_path}")
+        return "plan"
 
     async def compact(self) -> None:
         if len(self.messages) < 2:
@@ -130,6 +162,71 @@ class Agent:
                 "messages": self.messages,
             },
         )
+
+    def _generate_plan_file_path(self) -> str:
+        plan_dir = Path.home() / ".mini-claude-rebuild" / "plans"
+        plan_dir.mkdir(parents=True, exist_ok=True)
+        return str(plan_dir / f"plan-{self.session_id}.md")
+
+    def _build_plan_mode_prompt(self) -> str:
+        return f"""
+
+# Plan Mode Active
+
+Plan mode is active. You are in a read-only planning phase.
+
+Rules:
+- Read and inspect files as needed.
+- Do not modify project files or run shell commands.
+- Write your plan only to this plan file: {self.plan_file_path}
+- When the plan is complete, call `exit_plan_mode`.
+
+The plan should include:
+- Goal
+- Files likely to change
+- Implementation steps
+- Verification steps
+"""
+
+    async def _execute_plan_mode_tool(self, name: str) -> str:
+        if name == "enter_plan_mode":
+            if self.permission_mode == "plan":
+                return "Already in plan mode."
+            self.toggle_plan_mode()
+            return (
+                "Entered plan mode. You can read files and write only to the plan file.\n"
+                f"Plan file: {self.plan_file_path}"
+            )
+
+        if name == "exit_plan_mode":
+            if self.permission_mode != "plan":
+                return "Not in plan mode."
+
+            plan_content = "(No plan file found)"
+            if self.plan_file_path and Path(self.plan_file_path).exists():
+                plan_content = Path(self.plan_file_path).read_text(encoding="utf-8")
+
+            if self.plan_approval_fn:
+                approval = await self.plan_approval_fn(plan_content)
+                choice = approval.get("choice", "manual-execute")
+                if choice == "keep-planning":
+                    feedback = approval.get("feedback")
+                    suffix = f"\nUser feedback: {feedback}" if feedback else ""
+                    return f"User wants to keep planning.{suffix}"
+                if choice == "execute":
+                    target_mode = "acceptEdits"
+                else:
+                    target_mode = self.pre_plan_mode or "default"
+            else:
+                target_mode = self.pre_plan_mode or "default"
+
+            self.permission_mode = target_mode
+            self.pre_plan_mode = None
+            self.plan_file_path = None
+            self.system_prompt = self.base_system_prompt
+            return f"Exited plan mode. Permission mode: {self.permission_mode}\n\n## Plan\n{plan_content}"
+
+        return f"Unknown plan mode tool: {name}"
 
     def _persist_large_result(self, tool_name: str, result: str) -> str:
         if len(result.encode("utf-8")) <= LARGE_RESULT_THRESHOLD:

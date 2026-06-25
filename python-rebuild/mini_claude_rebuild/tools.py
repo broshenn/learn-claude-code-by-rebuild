@@ -145,6 +145,22 @@ tool_definitions = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "enter_plan_mode",
+            "description": "Enter read-only plan mode before making changes.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "exit_plan_mode",
+            "description": "Exit plan mode after writing the plan file.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
 ]
 
 
@@ -281,14 +297,25 @@ def run_shell(command: str, timeout: int = 30000) -> str:
     return result.stdout or "(no output)"
 
 
-def check_permission(name: str, arguments: dict, mode: PermissionMode = "default") -> dict:
+def check_permission(
+    name: str,
+    arguments: dict,
+    mode: PermissionMode = "default",
+    plan_file_path: str | None = None,
+) -> dict:
     if mode == "bypassPermissions":
         return {"action": "allow"}
 
     if name in READ_TOOLS:
         return {"action": "allow"}
 
+    if name in {"enter_plan_mode", "exit_plan_mode"}:
+        return {"action": "allow"}
+
     if mode == "plan" and name in CONFIRM_TOOLS:
+        file_path = arguments.get("file_path")
+        if plan_file_path and file_path and Path(file_path).resolve() == Path(plan_file_path).resolve():
+            return {"action": "allow"}
         return {"action": "deny", "message": f"Blocked in plan mode: {name}"}
 
     if mode == "acceptEdits" and name in EDIT_TOOLS:
